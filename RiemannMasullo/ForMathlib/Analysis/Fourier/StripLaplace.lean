@@ -13,8 +13,8 @@ converges absolutely on the open strip `|re z| < α`, and its restriction to eac
 of the strip satisfies Plancherel's identity.
 -/
 
-open MeasureTheory Complex Metric
-open scoped FourierTransform Real
+open MeasureTheory Complex Metric Set
+open scoped FourierTransform Real ENNReal
 
 @[expose] public noncomputable section
 
@@ -180,6 +180,43 @@ theorem differentiableOn_bilateralLaplace
     DifferentiableOn ℂ (bilateralLaplace f) {z : ℂ | |z.re| < α} := fun _ hz ↦
   (hasDerivAt_bilateralLaplace hf hz).differentiableAt.differentiableWithinAt
 
+/-- On a vertical line of the open strip, the two-sided Laplace transform is the Fourier
+transform of the damped function, which is integrable and square integrable. -/
+private theorem bilateralLaplace_line_eq_fourier
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {σ : ℝ} (hσ : |σ| < α) :
+    Integrable (fun x : ℝ ↦ f x * (Real.exp (σ * x) : ℂ)) ∧
+      MemLp (fun x : ℝ ↦ f x * (Real.exp (σ * x) : ℂ)) 2 ∧
+      ∀ t : ℝ, bilateralLaplace f (σ + t * I) =
+        𝓕 (fun x : ℝ ↦ f x * (Real.exp (σ * x) : ℂ)) (t / (-(2 * π))) := by
+  refine ⟨?_, memLp_mul_exp_of_memLp_exp_abs hf hσ.le, fun t ↦ ?_⟩
+  · have h := integrable_mul_cexp_of_memLp_exp_abs hf (z := (σ : ℂ)) (by simpa using hσ)
+    refine h.congr (.of_forall fun x ↦ ?_)
+    simp only [Complex.ofReal_exp, Complex.ofReal_mul]
+  · rw [Real.fourier_real_eq_integral_exp_smul]
+    unfold bilateralLaplace
+    refine integral_congr_ae (.of_forall fun x ↦ ?_)
+    have hph : ((-2 * π * x * (t / (-(2 * π))) : ℝ) : ℂ) = t * x := by
+      have := Real.pi_ne_zero
+      push_cast
+      field_simp
+    simp only [smul_eq_mul]
+    rw [hph, Complex.ofReal_exp, mul_left_comm, ← Complex.exp_add]
+    congr 2
+    push_cast
+    ring
+
+/-- The two-sided Laplace transform of a function in the weighted `L²` space is square
+integrable on each vertical line of the open strip. -/
+theorem integrable_norm_sq_bilateralLaplace
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {σ : ℝ} (hσ : |σ| < α) :
+    Integrable fun t : ℝ ↦ ‖bilateralLaplace f (σ + t * I)‖ ^ 2 := by
+  obtain ⟨hg1, hg2, hL⟩ := bilateralLaplace_line_eq_fourier hf hσ
+  obtain ⟨hF2, -⟩ := memLp_two_fourier_and_eLpNorm_eq hg1 hg2
+  have hi := (memLp_two_iff_integrable_sq_norm hF2.aestronglyMeasurable).mp hF2
+  have hne : -(2 * π) ≠ 0 := by have := Real.pi_pos; linarith
+  refine (hi.comp_div hne).congr (.of_forall fun t ↦ ?_)
+  simp only [hL]
+
 /-- Plancherel's identity on a vertical line of the open strip: the two-sided Laplace transform
 of a function in the weighted `L²` space is square integrable on the line `re z = σ`, with
 norm given by the weight `exp (2 * σ * x)`. -/
@@ -187,12 +224,8 @@ theorem integral_norm_sq_bilateralLaplace
     (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {σ : ℝ} (hσ : |σ| < α) :
     ∫ t : ℝ, ‖bilateralLaplace f (σ + t * I)‖ ^ 2 =
       2 * π * ∫ x : ℝ, ‖f x‖ ^ 2 * Real.exp (2 * σ * x) := by
+  obtain ⟨hg1, hg2, hL⟩ := bilateralLaplace_line_eq_fourier hf hσ
   set g : ℝ → ℂ := fun x ↦ f x * (Real.exp (σ * x) : ℂ) with hg
-  have hg2 : MemLp g 2 := memLp_mul_exp_of_memLp_exp_abs hf hσ.le
-  have hg1 : Integrable g := by
-    have h := integrable_mul_cexp_of_memLp_exp_abs hf (z := (σ : ℂ)) (by simpa using hσ)
-    refine h.congr (.of_forall fun x ↦ ?_)
-    simp only [hg, Complex.ofReal_exp, Complex.ofReal_mul]
   obtain ⟨hF2, hnorm⟩ := memLp_two_fourier_and_eLpNorm_eq hg1 hg2
   have h0 (h : ℝ → ℂ) : 0 ≤ ∫ x, ‖h x‖ ^ 2 := integral_nonneg fun _ ↦ by positivity
   have key : ∫ ξ, ‖𝓕 g ξ‖ ^ 2 = ∫ x, ‖g x‖ ^ 2 := by
@@ -203,19 +236,6 @@ theorem integral_norm_sq_bilateralLaplace
       (Real.rpow_nonneg (h0 _) _)).mp hnorm
     have h2 := congrArg (· ^ (2 : ℝ)) h1
     simpa only [Real.rpow_inv_rpow (h0 _) two_ne_zero] using h2
-  have hL (t : ℝ) : bilateralLaplace f (σ + t * I) = 𝓕 g (t / (-(2 * π))) := by
-    rw [Real.fourier_real_eq_integral_exp_smul]
-    unfold bilateralLaplace
-    refine integral_congr_ae (.of_forall fun x ↦ ?_)
-    have hph : ((-2 * π * x * (t / (-(2 * π))) : ℝ) : ℂ) = t * x := by
-      have := Real.pi_ne_zero
-      push_cast
-      field_simp
-    simp only [hg, smul_eq_mul]
-    rw [hph, Complex.ofReal_exp, mul_left_comm, ← Complex.exp_add]
-    congr 2
-    push_cast
-    ring
   calc ∫ t : ℝ, ‖bilateralLaplace f (σ + t * I)‖ ^ 2
       = ∫ t : ℝ, (fun ξ ↦ ‖𝓕 g ξ‖ ^ 2) (t / (-(2 * π))) := by simp only [hL]
     _ = |-(2 * π)| • ∫ ξ, ‖𝓕 g ξ‖ ^ 2 := by
@@ -231,5 +251,141 @@ theorem integral_norm_sq_bilateralLaplace
         congr 2
         push_cast
         ring
+
+/-- Plancherel's identity on a vertical line of the open strip, as an identity of lower
+Lebesgue integrals. -/
+theorem lintegral_enorm_sq_bilateralLaplace
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {σ : ℝ} (hσ : |σ| < α) :
+    ∫⁻ t : ℝ, ‖bilateralLaplace f (σ + t * I)‖ₑ ^ 2 =
+      ENNReal.ofReal (2 * π) * ∫⁻ x : ℝ, ‖f x‖ₑ ^ 2 * ENNReal.ofReal (Real.exp (2 * σ * x)) := by
+  have hsq (a : ℂ) : ‖a‖ₑ ^ 2 = ENNReal.ofReal (‖a‖ ^ 2) := by
+    rw [ENNReal.ofReal_pow (norm_nonneg _), ofReal_norm]
+  have hR : Integrable fun x : ℝ ↦ ‖f x‖ ^ 2 * Real.exp (2 * σ * x) := by
+    have h := (memLp_two_iff_integrable_sq_norm (memLp_mul_exp_of_memLp_exp_abs hf
+      hσ.le).aestronglyMeasurable).mp (memLp_mul_exp_of_memLp_exp_abs hf hσ.le)
+    refine h.congr (.of_forall fun x ↦ ?_)
+    simp only
+    rw [norm_mul, Complex.norm_real, Real.norm_eq_abs, abs_of_pos (Real.exp_pos _), mul_pow,
+      ← Real.exp_nat_mul]
+    congr 2
+    push_cast
+    ring
+  simp_rw [hsq]
+  rw [← ofReal_integral_eq_lintegral_ofReal (integrable_norm_sq_bilateralLaplace hf hσ)
+    (.of_forall fun _ ↦ by positivity), integral_norm_sq_bilateralLaplace hf hσ,
+    ENNReal.ofReal_mul (by positivity), ofReal_integral_eq_lintegral_ofReal hR
+    (.of_forall fun _ ↦ by positivity)]
+  congr 1
+  refine lintegral_congr fun x ↦ ?_
+  rw [ENNReal.ofReal_mul (by positivity)]
+
+/-- Multiplying by `x` keeps a function in the weighted `L²` space of any smaller exponent. -/
+theorem memLp_exp_abs_smul_id_mul
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {β : ℝ} (hβ : β < α) :
+    MemLp (fun x : ℝ ↦ Real.exp (β * |x|) • ((x : ℂ) * f x)) 2 := by
+  have hfm := aestronglyMeasurable_of_exp_abs_smul hf.aestronglyMeasurable
+  have hc : 0 < α - β := sub_pos.mpr hβ
+  refine hf.of_le_mul (c := (α - β)⁻¹)
+    ((by fun_prop : Continuous fun x : ℝ ↦ Real.exp (β * |x|)).aestronglyMeasurable.smul
+      ((by fun_prop : Continuous fun x : ℝ ↦ (x : ℂ)).aestronglyMeasurable.mul hfm))
+    (.of_forall fun x ↦ ?_)
+  rw [norm_smul, norm_smul, norm_mul, Complex.norm_real, Real.norm_eq_abs, Real.norm_eq_abs,
+    Real.norm_eq_abs, abs_of_pos (Real.exp_pos _), abs_of_pos (Real.exp_pos _)]
+  have h1 : (α - β) * |x| ≤ Real.exp ((α - β) * |x|) := by
+    linarith [Real.add_one_le_exp ((α - β) * |x|)]
+  have h2 : Real.exp (α * |x|) = Real.exp (β * |x|) * Real.exp ((α - β) * |x|) := by
+    rw [← Real.exp_add]; congr 1; ring
+  have h3 : |x| ≤ (α - β)⁻¹ * Real.exp ((α - β) * |x|) := by
+    rw [← div_eq_inv_mul, le_div_iff₀ hc]; linarith
+  rw [h2]
+  calc Real.exp (β * |x|) * (|x| * ‖f x‖)
+      ≤ Real.exp (β * |x|) * ((α - β)⁻¹ * Real.exp ((α - β) * |x|) * ‖f x‖) := by gcongr
+    _ = (α - β)⁻¹ * (Real.exp (β * |x|) * Real.exp ((α - β) * |x|) * ‖f x‖) := by ring
+
+/-- On the open strip, the derivative of the two-sided Laplace transform of `f` is the
+transform of `x * f x`. -/
+theorem deriv_bilateralLaplace
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {z : ℂ} (hz : |z.re| < α) :
+    deriv (bilateralLaplace f) z = bilateralLaplace (fun x : ℝ ↦ (x : ℂ) * f x) z := by
+  rw [(hasDerivAt_bilateralLaplace hf hz).deriv]
+  unfold bilateralLaplace
+  refine integral_congr_ae (.of_forall fun x ↦ ?_)
+  ring
+
+/-- Plancherel's identity for the derivative on a vertical line of the open strip. -/
+theorem integral_norm_sq_deriv_bilateralLaplace
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {σ : ℝ} (hσ : |σ| < α) :
+    ∫ t : ℝ, ‖deriv (bilateralLaplace f) (σ + t * I)‖ ^ 2 =
+      2 * π * ∫ x : ℝ, ‖f x‖ ^ 2 * (x ^ 2 * Real.exp (2 * σ * x)) := by
+  obtain ⟨β, h1, h2⟩ := exists_between hσ
+  have hre (t : ℝ) : |((σ : ℂ) + t * I).re| < α := by simpa using hσ
+  simp_rw [deriv_bilateralLaplace hf (hre _)]
+  rw [integral_norm_sq_bilateralLaplace (memLp_exp_abs_smul_id_mul hf h2) h1]
+  congr 1
+  refine integral_congr_ae (.of_forall fun x ↦ ?_)
+  simp only [norm_mul, Complex.norm_real, Real.norm_eq_abs, mul_pow, sq_abs]
+  ring
+
+/-- Plancherel's identity for the derivative on a vertical line of the open strip, as an
+identity of lower Lebesgue integrals. -/
+theorem lintegral_enorm_sq_deriv_bilateralLaplace
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {σ : ℝ} (hσ : |σ| < α) :
+    ∫⁻ t : ℝ, ‖deriv (bilateralLaplace f) (σ + t * I)‖ₑ ^ 2 =
+      ENNReal.ofReal (2 * π) *
+        ∫⁻ x : ℝ, ‖f x‖ₑ ^ 2 * ENNReal.ofReal (x ^ 2 * Real.exp (2 * σ * x)) := by
+  obtain ⟨β, h1, h2⟩ := exists_between hσ
+  have hre (t : ℝ) : |((σ : ℂ) + t * I).re| < α := by simpa using hσ
+  simp_rw [deriv_bilateralLaplace hf (hre _)]
+  rw [lintegral_enorm_sq_bilateralLaplace (memLp_exp_abs_smul_id_mul hf h2) h1]
+  congr 1
+  refine lintegral_congr fun x ↦ ?_
+  have hx : ‖(x : ℂ)‖ₑ ^ 2 = ENNReal.ofReal (x ^ 2) := by
+    rw [← ofReal_norm, Complex.norm_real, ← ENNReal.ofReal_pow (norm_nonneg _),
+      Real.norm_eq_abs, sq_abs]
+  rw [eNorm_mul, mul_pow, hx, ENNReal.ofReal_mul (sq_nonneg x)]
+  ring
+
+/-- The weighted Dirichlet integral of the two-sided Laplace transform over the open strip, in
+terms of the original function: for a measurable weight `w` depending on the real part only,
+`∫_{|σ| < α} w σ ∫ ‖F'(σ + it)‖² dt dσ = 2π ∫ ‖f x‖² x² (∫_{|σ| < α} w σ exp (2σx) dσ) dx`. -/
+theorem lintegral_strip_enorm_sq_deriv_bilateralLaplace
+    (hf : MemLp (fun x : ℝ ↦ Real.exp (α * |x|) • f x) 2) {w : ℝ → ℝ≥0∞} (hw : Measurable w) :
+    ∫⁻ σ in Ioo (-α) α, w σ * ∫⁻ t : ℝ, ‖deriv (bilateralLaplace f) (σ + t * I)‖ₑ ^ 2 =
+      ENNReal.ofReal (2 * π) * ∫⁻ x : ℝ, ‖f x‖ₑ ^ 2 *
+        (ENNReal.ofReal (x ^ 2) *
+          ∫⁻ σ in Ioo (-α) α, w σ * ENNReal.ofReal (Real.exp (2 * σ * x))) := by
+  have hfm := aestronglyMeasurable_of_exp_abs_smul hf.aestronglyMeasurable
+  have hφ : AEMeasurable fun x : ℝ ↦ ‖f x‖ₑ ^ 2 := hfm.eNorm.pow_const 2
+  let K : ℝ → ℝ → ℝ≥0∞ := fun σ x ↦ w σ * (ENNReal.ofReal (2 * π) *
+    (‖f x‖ₑ ^ 2 * ENNReal.ofReal (x ^ 2 * Real.exp (2 * σ * x))))
+  have hmeas (σ : ℝ) : AEMeasurable fun x : ℝ ↦
+      ‖f x‖ₑ ^ 2 * ENNReal.ofReal (x ^ 2 * Real.exp (2 * σ * x)) :=
+    hφ.mul (by fun_prop : Measurable fun x : ℝ ↦
+      ENNReal.ofReal (x ^ 2 * Real.exp (2 * σ * x))).aemeasurable
+  have hK : AEMeasurable (Function.uncurry K) ((volume.restrict (Ioo (-α) α)).prod volume) :=
+    (hw.comp measurable_fst).aemeasurable.mul (aemeasurable_const.mul
+      ((hφ.comp_quasiMeasurePreserving Measure.quasiMeasurePreserving_snd).mul
+        (by fun_prop : Measurable fun p : ℝ × ℝ ↦
+          ENNReal.ofReal (p.2 ^ 2 * Real.exp (2 * p.1 * p.2))).aemeasurable))
+  have h1 : ∫⁻ σ in Ioo (-α) α, w σ * ∫⁻ t : ℝ, ‖deriv (bilateralLaplace f) (σ + t * I)‖ₑ ^ 2 =
+      ∫⁻ σ in Ioo (-α) α, ∫⁻ x : ℝ, K σ x := by
+    refine setLIntegral_congr_fun measurableSet_Ioo fun σ hσ ↦ ?_
+    simp only [K]
+    rw [lintegral_enorm_sq_deriv_bilateralLaplace hf (abs_lt.mpr hσ),
+      lintegral_const_mul'' _ ((hmeas σ).const_mul _), lintegral_const_mul'' _ (hmeas σ)]
+  rw [h1, lintegral_lintegral_swap hK, ← lintegral_const_mul' _ _ ENNReal.ofReal_ne_top]
+  refine lintegral_congr fun x ↦ ?_
+  have h2 (σ : ℝ) : K σ x = ENNReal.ofReal (2 * π) * (‖f x‖ₑ ^ 2 * ENNReal.ofReal (x ^ 2)) *
+      (w σ * ENNReal.ofReal (Real.exp (2 * σ * x))) := by
+    simp only [K]
+    rw [ENNReal.ofReal_mul (sq_nonneg x)]
+    ring
+  simp_rw [h2]
+  have h3 : AEMeasurable (fun σ : ℝ ↦ w σ * ENNReal.ofReal (Real.exp (2 * σ * x)))
+      (volume.restrict (Ioo (-α) α)) :=
+    (hw.mul (by fun_prop : Measurable fun σ : ℝ ↦
+      ENNReal.ofReal (Real.exp (2 * σ * x)))).aemeasurable
+  rw [lintegral_const_mul'' _ h3]
+  ring
 
 end RiemannMasullo
