@@ -124,4 +124,40 @@ theorem fourier_indicator_Ioc_cexp {p : ℂ} (hp : 0 < p.im) (x : ℝ) {T : ℝ}
   rw [← neg_div_neg_eq]
   congr 1 <;> ring
 
+/-- Convolution of a function supported in `(-∞, A]` with the one-sided exponential: beyond the
+support, it is the exponential times one number, the value at `p` of the transform of `u`.
+On the transform side this is `P (q / (x - p)) = (q - q p) / (x - p) + q p * P (1 / (x - p))`:
+the part of `q / (x - p)` at frequencies above the band of `q` is `q p` times the Cauchy
+kernel. -/
+theorem integral_mul_indicator_Ioi_cexp_sub_of_lt {u : ℝ → ℂ} {A : ℝ}
+    (hA : ∀ σ, A < σ → u σ = 0) (p : ℂ) {τ : ℝ} (hτ : A < τ) :
+    ∫ σ, u σ * indicator (Ioi (0 : ℝ)) (fun t : ℝ ↦ cexp (2 * π * I * p * t)) (τ - σ) =
+      cexp (2 * π * I * p * τ) * ∫ σ, u σ * cexp (-(2 * π * I * p * σ)) := by
+  rw [← integral_const_mul]
+  refine integral_congr_ae (.of_forall fun σ ↦ ?_)
+  by_cases hσ : A < σ
+  · simp [hA σ hσ]
+  · have hpos : τ - σ ∈ Ioi (0 : ℝ) := by
+      simp only [mem_Ioi]
+      linarith [not_lt.mp hσ]
+    simp only [indicator_of_mem hpos]
+    rw [mul_left_comm, ← Complex.exp_add]
+    congr 2
+    push_cast
+    ring
+
+/-- Convolution of a function supported in `[A, ∞)` with the one-sided exponential vanishes
+below the support. -/
+theorem integral_mul_indicator_Ioi_cexp_sub_of_gt {u : ℝ → ℂ} {A : ℝ}
+    (hA : ∀ σ, σ < A → u σ = 0) (p : ℂ) {τ : ℝ} (hτ : τ ≤ A) :
+    ∫ σ, u σ * indicator (Ioi (0 : ℝ)) (fun t : ℝ ↦ cexp (2 * π * I * p * t)) (τ - σ) = 0 := by
+  rw [← integral_zero ℝ ℂ]
+  refine integral_congr_ae (.of_forall fun σ ↦ ?_)
+  by_cases hσ : σ < A
+  · simp [hA σ hσ]
+  · have hneg : τ - σ ∉ Ioi (0 : ℝ) := by
+      simp only [mem_Ioi, not_lt]
+      linarith [not_lt.mp hσ]
+    simp [indicator_of_notMem hneg]
+
 end RiemannMasullo
