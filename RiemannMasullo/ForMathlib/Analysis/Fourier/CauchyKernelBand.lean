@@ -3,6 +3,7 @@ module
 public import Mathlib.Analysis.SpecialFunctions.Integrals.Basic
 public import Mathlib.MeasureTheory.Integral.ExpDecay
 public import Mathlib.Analysis.SpecialFunctions.ImproperIntegrals
+public import Mathlib.Analysis.Fourier.FourierTransform
 
 /-! # The Cauchy kernel split by frequency
 
@@ -14,6 +15,7 @@ the Paley–Wiener projection of a simple pole.
 -/
 
 open MeasureTheory Complex Set
+open scoped FourierTransform Real
 
 @[expose] public noncomputable section
 
@@ -58,5 +60,68 @@ theorem integral_cexp_cauchyKernel_band_add_tail {p : ℂ} (hp : 0 < p.im) (x T 
         ∫ τ in Ioi T, cexp (-I * ((x : ℂ) - p) * τ) = -I / ((x : ℂ) - p) := by
   rw [integral_cexp_cauchyKernel_band hp, integral_cexp_cauchyKernel_tail hp]
   ring
+
+/-- The one-sided exponential `τ ↦ exp (2πi p τ)` on `τ > 0`, for `p` in the upper half-plane,
+is integrable. -/
+theorem integrable_indicator_Ioi_cexp {p : ℂ} (hp : 0 < p.im) :
+    Integrable (indicator (Ioi (0 : ℝ)) fun τ : ℝ ↦ cexp (2 * π * I * p * τ)) := by
+  have hre : (2 * π * I * p).re < 0 := by
+    have : (2 * π * I * p).re = -(2 * π * p.im) := by simp
+    rw [this]
+    have := Real.pi_pos
+    nlinarith
+  exact (integrableOn_exp_mul_complex_Ioi hre 0).integrable_indicator measurableSet_Ioi
+
+/-- The Cauchy kernel as a Fourier transform: the transform of the one-sided exponential
+`exp (2πi p τ)`, `τ > 0`, is `(2πi (x - p))⁻¹`. -/
+theorem fourier_indicator_Ioi_cexp {p : ℂ} (hp : 0 < p.im) (x : ℝ) :
+    𝓕 (indicator (Ioi (0 : ℝ)) fun τ : ℝ ↦ cexp (2 * π * I * p * τ)) x =
+      (2 * π * I * ((x : ℂ) - p))⁻¹ := by
+  have hre : (-(2 * π * I * ((x : ℂ) - p))).re < 0 := by
+    have : (-(2 * π * I * ((x : ℂ) - p))).re = -(2 * π * p.im) := by simp
+    rw [this]
+    have := Real.pi_pos
+    nlinarith
+  rw [Real.fourier_real_eq_integral_exp_smul]
+  have h (τ : ℝ) : cexp (((-2 * π * τ * x : ℝ) : ℂ) * I) •
+      indicator (Ioi (0 : ℝ)) (fun τ : ℝ ↦ cexp (2 * π * I * p * τ)) τ =
+      indicator (Ioi (0 : ℝ)) (fun τ : ℝ ↦ cexp (-(2 * π * I * ((x : ℂ) - p)) * τ)) τ := by
+    by_cases hτ : τ ∈ Ioi (0 : ℝ)
+    · rw [indicator_of_mem hτ, indicator_of_mem hτ, smul_eq_mul, ← Complex.exp_add]
+      congr 1
+      push_cast
+      ring
+    · rw [indicator_of_notMem hτ, indicator_of_notMem hτ, smul_zero]
+  simp_rw [h]
+  rw [integral_indicator measurableSet_Ioi, integral_exp_mul_complex_Ioi hre 0]
+  simp
+
+/-- The band-limited part of the Cauchy kernel as a Fourier transform: the transform of the
+one-sided exponential cut at `τ ≤ T`. -/
+theorem fourier_indicator_Ioc_cexp {p : ℂ} (hp : 0 < p.im) (x : ℝ) {T : ℝ} (hT : 0 ≤ T) :
+    𝓕 (indicator (Ioc (0 : ℝ) T) fun τ : ℝ ↦ cexp (2 * π * I * p * τ)) x =
+      (1 - cexp (-(2 * π * I * ((x : ℂ) - p)) * T)) / (2 * π * I * ((x : ℂ) - p)) := by
+  have hre : (-(2 * π * I * ((x : ℂ) - p))).re < 0 := by
+    have : (-(2 * π * I * ((x : ℂ) - p))).re = -(2 * π * p.im) := by simp
+    rw [this]
+    have := Real.pi_pos
+    nlinarith
+  have hc : -(2 * π * I * ((x : ℂ) - p)) ≠ 0 := fun h ↦ by rw [h] at hre; simp at hre
+  rw [Real.fourier_real_eq_integral_exp_smul]
+  have h (τ : ℝ) : cexp (((-2 * π * τ * x : ℝ) : ℂ) * I) •
+      indicator (Ioc (0 : ℝ) T) (fun τ : ℝ ↦ cexp (2 * π * I * p * τ)) τ =
+      indicator (Ioc (0 : ℝ) T) (fun τ : ℝ ↦ cexp (-(2 * π * I * ((x : ℂ) - p)) * τ)) τ := by
+    by_cases hτ : τ ∈ Ioc (0 : ℝ) T
+    · rw [indicator_of_mem hτ, indicator_of_mem hτ, smul_eq_mul, ← Complex.exp_add]
+      congr 1
+      push_cast
+      ring
+    · rw [indicator_of_notMem hτ, indicator_of_notMem hτ, smul_zero]
+  simp_rw [h]
+  rw [integral_indicator measurableSet_Ioc, ← intervalIntegral.integral_of_le hT,
+    integral_exp_mul_complex hc]
+  simp only [Complex.ofReal_zero, mul_zero, Complex.exp_zero]
+  rw [← neg_div_neg_eq]
+  congr 1 <;> ring
 
 end RiemannMasullo
